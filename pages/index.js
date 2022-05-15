@@ -1,50 +1,59 @@
 import Head from 'next/head'
+import { useState } from 'react'
+import { useRouter } from 'next/router';
 
-export default function Home() {
+export default function Home(props) {
+  const [hashtag,setHashtag] = useState("coding")
+  const [searchNum,setSearchNum]=useState(1)
+  const [nextToken, setNextToken]=useState(props.meta)
+  const router = useRouter()
+
+  const searchTweet = async (mode)=>{
+    console.log("searching tweet ", hashtag, "number of tweets: ", searchNum)
+    if(mode==0){
+      setNextToken("")
+      setSearchNum(0)}
+    
+    router.replace({
+          pathname: window.location.pathname,
+          query: { search: hashtag,page:searchNum,nextToken:nextToken }
+      })}
+  console.log(props)
+  
   return (
     <div className="container">
       <Head>
-        <title>Create Next App</title>
+        <title>Twitter API Test</title>
         <link rel="icon" href="/favicon.ico" />
       </Head>
 
       <main>
         <h1 className="title">
-          Welcome to <a href="https://nextjs.org">Next.js!</a>
+          Twitter API Test
         </h1>
 
         <p className="description">
-          Get started by editing <code>pages/index.js</code>
+          A simple twitter search app
         </p>
-
+        <label htmlFor="hashtag">Hashtag search</label>
+        <input id="hashtag" name="hashtag" placeholder={hashtag} onChange={ (event) => setHashtag(event.target.value) }/>
+        <button onClick={(event=>{searchTweet(0)})}>Search</button>
         <div className="grid">
-          <a href="https://nextjs.org/docs" className="card">
-            <h3>Documentation &rarr;</h3>
-            <p>Find in-depth information about Next.js features and API.</p>
-          </a>
-
-          <a href="https://nextjs.org/learn" className="card">
-            <h3>Learn &rarr;</h3>
-            <p>Learn about Next.js in an interactive course with quizzes!</p>
-          </a>
-
-          <a
-            href="https://github.com/vercel/next.js/tree/master/examples"
-            className="card"
-          >
-            <h3>Examples &rarr;</h3>
-            <p>Discover and deploy boilerplate example Next.js projects.</p>
-          </a>
-
-          <a
-            href="https://vercel.com/import?filter=next.js&utm_source=create-next-app&utm_medium=default-template&utm_campaign=create-next-app"
-            className="card"
-          >
-            <h3>Deploy &rarr;</h3>
-            <p>
-              Instantly deploy your Next.js site to a public URL with Vercel.
-            </p>
-          </a>
+          <button onClick={(event=>{if(searchNum>1){setSearchNum(searchNum-1);searchTweet(1)}})}>Previous Page</button>
+          <button onClick={(event=>{setSearchNum(searchNum+1);searchTweet(1)})}>Next Page</button>
+          <p>Current Page: {searchNum}</p>
+        </div>
+        <div className="grid">
+          {props.finaldata.map((element,index)=>{
+            console.log(index)
+            return(
+              
+          <a key={index} href={element.url} className="card">
+            <h3>{element.username} &rarr;</h3>
+            <p>{element.text}</p>
+            <p>{element.created_at}</p>
+          </a>)
+          })}
         </div>
       </main>
 
@@ -207,3 +216,43 @@ export default function Home() {
     </div>
   )
 }
+
+//Prerendering of the page, this guarantees that the calls to the twitter API are made from the server side, which is important
+//because the twitter api does not support CORS
+export async function getServerSideProps(context) {
+  // Fetch data from external API
+  console.log(context.query.search==undefined)
+
+  let query = {"search":"coding","page":0}
+  if(context.query.search!=undefined && context.query.page!=undefined){
+    query = context.query
+  }
+  const url_template = "https://twitter.com/twitter/status/"
+  console.log(query)
+  const res = await fetch('http://localhost:3000/api/twitter/search2', {
+    method: 'POST',
+    body: JSON.stringify({
+      query
+    })
+  })
+  const data = await res.json()
+  console.log(data)
+  //const datadata = data.data
+  const finaldata = data.data.data
+  const includes = data.data.includes
+  //inefficient matching algorithm, better would be to create transformation from list into dictionary and have direct call be possible
+  finaldata.forEach(element => {
+    includes.users.forEach(user => {
+      if(user.id==element.author_id){
+        element["username"]=user.name
+      }
+    });
+    element["url"] = url_template+element.id
+  });
+  const meta = data.data.meta.next_token
+  //console.log(finaldata)
+  // Pass data to the page via props
+  return { props: { finaldata, includes, meta} }
+}
+
+
